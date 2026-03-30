@@ -6,14 +6,19 @@ import soundfile as sf
 
 class TTSManager:
     def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
         self.kokoro_pipeline = None
         import threading
         self.f5_lock = threading.Lock()
         self.f5_ema_model = None
 
     def has_gpu(self):
-        return self.device == "cuda"
+        return self.device in ["cuda", "mps"]
     
     def init_kokoro(self, lang_code='a'):
         if self.kokoro_pipeline is None:

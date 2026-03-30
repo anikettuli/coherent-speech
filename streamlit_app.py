@@ -58,7 +58,8 @@ with col1:
         has_gpu = tts_manager.has_gpu()
         hw_ops = ["Auto"]
         if has_gpu:
-            hw_ops.append("GPU (CUDA)")
+            gpu_name = "GPU (Apple Silicon M-Series)" if getattr(tts_manager, "device", "") == "mps" else "GPU (CUDA)"
+            hw_ops.append(gpu_name)
         hw_ops.append("CPU")
         
         selected_hw = st.radio("Hardware Acceleration:", hw_ops, horizontal=True)

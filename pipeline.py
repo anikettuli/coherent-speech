@@ -50,9 +50,11 @@ class AudioVideoPipeline:
         if progress_callback:
             progress_callback(10, "Loading Whisper ASR Engine...")
         
-        device = "cuda" if self.tts.has_gpu() else "cpu"
+        device = "cuda" if self.tts.has_gpu() and getattr(self.tts, "device", "") == "cuda" else "cpu"
         if device_override == "GPU (CUDA)":
             device = "cuda"
+        elif device_override == "GPU (Apple Silicon M-Series)":
+            device = "cpu" # CTranslate2 uses highly optimized CPU bindings for Apple Silicon
         elif device_override == "CPU":
             device = "cpu"
             
