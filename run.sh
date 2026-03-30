@@ -26,4 +26,13 @@ echo "Installing modern dependencies blazingly fast..."
 uv pip install -r requirements.txt
 
 echo "Starting Application..."
-python app.py
+# Patch LD_LIBRARY_PATH so CUDA libs (cublas, cudnn, npp) can be found
+SITE_PACKAGES=$(python -c 'import site; print(site.getsitepackages()[0])')
+for d in "$SITE_PACKAGES"/nvidia/*/lib; do
+    if [ -d "$d" ]; then
+        export LD_LIBRARY_PATH="$d:$LD_LIBRARY_PATH"
+    fi
+done
+
+streamlit run streamlit_app.py
+

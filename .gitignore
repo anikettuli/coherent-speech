@@ -1,2 +1,13 @@
-/__pycache__
-/venv
+venv/
+__pycache__/
+.cache/
+.streamlit/
+temp_*/
+output_*/
+*.wav
+*.mp4
+!index.mp4
+.DS_Store
+*.pyc
+*.log
+index.mp4

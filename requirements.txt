@@ -1,6 +1,9 @@
-gradio
+streamlit
 faster-whisper
 kokoro
 soundfile
 pydub
 ffmpeg-python
+torchvision
+f5-tts
+nvidia-npp
