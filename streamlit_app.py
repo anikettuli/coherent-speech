@@ -1,3 +1,10 @@
+import os
+import warnings
+
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
+warnings.filterwarnings("ignore")
+
 import streamlit as st
 from tts_manager import TTSManager
 from pipeline import AudioVideoPipeline
@@ -8,6 +15,17 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 1.5rem;
+            padding-bottom: 0rem;
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 @st.cache_resource
 def get_managers():
@@ -36,6 +54,15 @@ with col1:
         
     with st.container(border=True):
         st.subheader("2. Generation Config")
+        
+        has_gpu = tts_manager.has_gpu()
+        hw_ops = ["Auto"]
+        if has_gpu:
+            hw_ops.append("GPU (CUDA)")
+        hw_ops.append("CPU")
+        
+        selected_hw = st.radio("Hardware Acceleration:", hw_ops, horizontal=True)
+        
         voice_mode = st.radio(
             "Synthesis Strategy:",
             ["[MODELS] Built-in Studio Voices", "[CLONING] Pipeline (In-Dev)"],
@@ -53,7 +80,7 @@ with col1:
         whisper_size = st.select_slider(
             "ASR Precision Target:",
             options=["tiny", "base", "small", "medium", "large"],
-            value="small"
+            value="medium"
         )
 
 with col2:
@@ -103,7 +130,8 @@ with col2:
                             "temp_audio.wav", 
                             model_size=whisper_size,
                             progress_callback=update_prog,
-                            check_cancel=check_prog
+                            check_cancel=check_prog,
+                            device_override=selected_hw
                         )
                     
                     if not st.session_state.cancel_pipeline:

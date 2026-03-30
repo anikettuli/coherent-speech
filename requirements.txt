@@ -7,3 +7,5 @@ ffmpeg-python
 torchvision
 f5-tts
 nvidia-npp
+nvidia-cublas-cu12
+nvidia-cudnn-cu12

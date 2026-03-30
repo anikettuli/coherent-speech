@@ -2,12 +2,21 @@ venv/
 __pycache__/
 .cache/
 .streamlit/
+
+# Models and Downloads
+models/
+
+# Generated Media and Artifacts
 temp_*/
 output_*/
 *.wav
 *.mp4
-!index.mp4
+*.m4a
+
+# Scratch files
+test_*.py
+
+# OS / Python files
 .DS_Store
 *.pyc
 *.log
-index.mp4

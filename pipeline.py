@@ -23,7 +23,7 @@ class AudioVideoPipeline:
             (
                 ffmpeg
                 .input(video_path)
-                .output(output_audio_path, ac=1, ar="16000") # 16kHz mono for whisper
+                .output(output_audio_path, ac=1, ar="16000", threads=16) # use all 16 threads of 5900HS
                 .overwrite_output()
                 .run(capture_stdout=True, capture_stderr=True)
             )
@@ -31,7 +31,7 @@ class AudioVideoPipeline:
             print("FFmpeg error:", e.stderr)
             raise e
 
-    def run_asr(self, audio_path, model_size="small", progress_callback=None, check_cancel=None):
+    def run_asr(self, audio_path, model_size="small", progress_callback=None, check_cancel=None, device_override=None):
         # 0. Check Cache
         cache_dir = Path(".cache/asr")
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -51,17 +51,46 @@ class AudioVideoPipeline:
             progress_callback(10, "Loading Whisper ASR Engine...")
         
         device = "cuda" if self.tts.has_gpu() else "cpu"
+        if device_override == "GPU (CUDA)":
+            device = "cuda"
+        elif device_override == "CPU":
+            device = "cpu"
+            
         compute_type = "float16" if device == "cuda" else "int8"
         
         try:
-            model = WhisperModel(model_size, device=device, compute_type=compute_type)
+            model = WhisperModel(
+                model_size, 
+                device=device, 
+                compute_type=compute_type,
+                download_root="models/whisper",
+                cpu_threads=16,
+                num_workers=4
+            )
             # Trigger library check early
-            segments, info = model.transcribe(audio_path, beam_size=5)
+            segments, info = model.transcribe(
+                audio_path, 
+                beam_size=2,
+                vad_filter=True,
+                vad_parameters=dict(min_silence_duration_ms=500)
+            )
         except Exception as e:
             if "libcublas" in str(e) or "libcudnn" in str(e) or "RuntimeError" in str(e):
                 print("CUDA libs missing or failing, falling back to robust CPU ASR...")
-                model = WhisperModel(model_size, device="cpu", compute_type="int8")
-                segments, info = model.transcribe(audio_path, beam_size=5)
+                model = WhisperModel(
+                    model_size, 
+                    device="cpu", 
+                    compute_type="int8",
+                    download_root="models/whisper",
+                    cpu_threads=16,
+                    num_workers=4
+                )
+                segments, info = model.transcribe(
+                    audio_path, 
+                    beam_size=2,
+                    vad_filter=True,
+                    vad_parameters=dict(min_silence_duration_ms=500)
+                )
             else:
                 raise e
         
@@ -147,6 +176,14 @@ class AudioVideoPipeline:
         if progress_callback:
             progress_callback(30, "Extracting Cloned Voice DNA...")
         from pydub import AudioSegment
+        import concurrent.futures
+        import threading
+        try:
+            from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+            ctx = get_script_run_ctx()
+        except Exception:
+            ctx = None
+            
         output_audio = AudioSegment.silent(duration=int(video_duration * 1000) + 2000)
         import tempfile
         import os
@@ -155,26 +192,44 @@ class AudioVideoPipeline:
         ref_path, ref_text = self.extract_reference(segments, "temp_audio.wav")
         print(f"Extracted Reference: {ref_text}")
         
-        for idx, seg in enumerate(segments):
-            if check_cancel and check_cancel():
-                break
-            if progress_callback: 
-                pct = 35 + int(55 * (idx / max(1, len(segments))))
-                progress_callback(pct, f"Synthesizing F5 Clone Audio ({idx+1}/{len(segments)})...")
+        def process_segment(idx, seg):
+            if ctx is not None:
+                add_script_run_ctx(threading.current_thread(), ctx)
                 
             text = seg["text"].strip()
             if not text:
-                continue
+                return None
                 
             seg_wav_path = os.path.join(temp_dir, f"seg_{idx}.wav")
+            success = self.tts.generate_speech_f5(text, seg_wav_path, ref_path, ref_text)
             
-            # Generate TTS with cloning
-            self.tts.generate_speech_f5(text, seg_wav_path, ref_path, ref_text)
-                
-            if os.path.exists(seg_wav_path):
+            if success and os.path.exists(seg_wav_path):
                 tts_clip = AudioSegment.from_wav(seg_wav_path)
                 position_ms = int(seg["start"] * 1000)
-                output_audio = output_audio.overlay(tts_clip, position=position_ms)
+                return (tts_clip, position_ms)
+            return None
+
+        completed = 0
+        total = len(segments)
+        
+        # Dispatch parallel TTS generation to saturate the GPU (RTX 3070 has 8GB VRAM)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {executor.submit(process_segment, idx, seg): idx for idx, seg in enumerate(segments)}
+            
+            for future in concurrent.futures.as_completed(futures):
+                if check_cancel and check_cancel():
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+                    
+                result = future.result()
+                if result:
+                    tts_clip, position_ms = result
+                    output_audio = output_audio.overlay(tts_clip, position=position_ms)
+                    
+                completed += 1
+                if progress_callback: 
+                    pct = 35 + int(55 * (completed / max(1, total)))
+                    progress_callback(pct, f"Synthesizing F5 Clone Audio ({completed}/{total})...")
         
         composed_path = "composed_clean_audio.wav"
         output_audio.export(composed_path, format="wav")
