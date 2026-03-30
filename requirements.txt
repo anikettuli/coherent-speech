@@ -1,0 +1,6 @@
+gradio
+faster-whisper
+kokoro
+soundfile
+pydub
+ffmpeg-python
