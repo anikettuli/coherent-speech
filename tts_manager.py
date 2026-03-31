@@ -80,9 +80,10 @@ class TTSManager:
                 
             print(f"Synthesizing '{text[:30]}...' with native F5-TTS")
             
-            # Monkey-patch F5-TTS to prevent its internal ThreadPoolExecutor
+            # HACK: Monkey-patch F5-TTS to prevent its internal ThreadPoolExecutor
             # from running multiple inference threads concurrently on the same
             # non-thread-safe transformer model state.
+            # Upstream issue tracking thread safety for F5-TTS inference.
             original_executor = utils_infer.ThreadPoolExecutor
             utils_infer.ThreadPoolExecutor = lambda *args, **kwargs: concurrent.futures.ThreadPoolExecutor(max_workers=1)
             

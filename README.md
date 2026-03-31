@@ -1,17 +1,33 @@
-# Coherant Speech Restorer
+![Coherent Speech Studio Banner](assets/banner.png)
 
-Coherant Speech is a high-performance, AI-driven video restoration pipeline. It revitalizes videos with poor-quality audio by generating clean, studio-quality speech using state-of-the-art Natural Language Processing (NLP) and Text-to-Speech (TTS) technologies, and aligns it perfectly with the original video timeline.
+# 🎙️ Coherent Speech Studio
 
-## Features
+[![Python 3.13](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![UI: Streamlit](https://img.shields.io/badge/UI-Streamlit-red.svg)](https://streamlit.io/)
 
-- **High-Fidelity Voice Generation**: Leveraging the bleeding-edge Kokoro-82M model for expressive, built-in studio voices.
-- **Zero-Shot Voice Cloning**: Includes experimental support for zero-shot voice cloning using F5-TTS. It can automatically extract voice DNA from the source video to synthesize speech that sounds like the original speaker.
-- **Robust Automatic Speech Recognition (ASR)**: Uses Faster-Whisper to transcribe audio accurately. Includes a caching mechanism to avoid re-running expensive transcriptions.
-- **Dynamic Hardware Acceleration**: Automatically detects and utilizes NVIDIA GPUs (CUDA) and Apple Silicon M-Series chips (MPS) for maximum inference speed, with robust multithreaded CPU fallback mechanisms for maximum compatibility across devices.
-- **Modern User Interface**: A responsive and interactive visual playground built with Streamlit, enabling intuitive file uploads, hardware selection, and real-time inference progress tracking.
-- **Cross-Platform Speed**: Built to take advantage of native Python speeds, managed by the blazingly fast `uv` package manager.
+## Overview
+![Streamlit UI Screenshot](assets/screenshot.png)
 
-## Prerequisites
+Coherent Speech is a high-performance, AI-driven audio and video restoration pipeline. It revitalizes media with poor-quality audio by interpreting the original transcription and reconstructing pristine, studio-quality speech. Using state-of-the-art Natural Language Processing (NLP) and Text-to-Speech (TTS) technologies, it flawlessly aligns new, clean dialogue with the original timeline.
+
+## 🎯 Use Cases
+
+Rather than relying on basic noise reduction, **Coherent Speech** completely rebuilds your audio track:
+- **Restoring Damaged Recordings:** Salvage interviews, podcasts, or voice memos that are garbled, noisy, or suffer from severe mic drop-outs.
+- **Volume Normalization:** Automatically reconstruct speech that was recorded far too quietly into a rich, full-bodied studio voice.
+- **General Media Enhancement:** Upgrade amateur vlog or presentation audio into professional studio-grade quality instantly.
+
+## 🚀 Features
+
+- **High-Fidelity Audio Rebuilding:** Leverages the blazing-fast Kokoro-82M model to generate expressive built-in studio voices.
+- **Zero-Shot Voice Cloning (In-Dev):** F5-TTS automatically extracts a "voice map" from your source file to reconstruct speech that still sounds like the original speaker.
+- **Robust Automatic Speech Recognition (ASR):** Uses Faster-Whisper to transcribe audio accurately, with an automated disk cache to skip re-transcribing on subsequent runs.
+- **Dynamic Hardware Acceleration:** Automatically detects and utilizes NVIDIA GPUs (CUDA) and Apple Silicon M-Series chips (MPS) for maximum inference speed, offering robust multithreaded CPU fallbacks for total portability.
+- **Modern User Interface:** A responsive and interactive visual dashboard built with Streamlit, enabling intuitive file uploads, hardware selection, and real-time inference progress tracking.
+- **Cross-Platform Speed:** Native Python performance, managed by the blazingly fast `uv` package manager with version-locked safety.
+
+## 📋 Prerequisites
 
 - **Python:** Highly compatible with native Python 3.13.
 - **System Packages:**
@@ -23,18 +39,18 @@ On debian/ubuntu machines, you can install the system requirements via:
 sudo apt-get update && sudo apt-get install -y ffmpeg espeak-ng
 ```
 
-## Setup & Installation
+## 🛠️ Setup & Installation
 
 The project uses `uv`, an extremely fast Python package manager.
 
 1. **Clone the repository:**
    ```sh
-   git clone <your-repo-url>
-   cd coherant-speech
+   git clone https://github.com/anikettuli/coherent-speech.git
+   cd coherent-speech
    ```
 
 2. **Automated Setup:**
-   You can run the provided interactive script to install dependencies, set up the virtual environment, and launch the application all in one go.
+   Run the provided interactive script to install dependencies, set up the virtual environment, and launch the application all in one go.
    ```sh
    ./run.sh
    ```
@@ -51,24 +67,30 @@ The project uses `uv`, an extremely fast Python package manager.
    
    # Install dependencies
    uv pip install -r requirements.txt
+   
+   # Note: For CUDA support, run `uv pip install -r requirements-gpu.txt` as well.
    ```
 
-## Usage
+## 💻 Usage
 
-If you've installed manually, you can start the development server using Streamlit:
+Start the development server using Streamlit:
 ```sh
 streamlit run streamlit_app.py
 ```
-*(Note: Be sure your LD_LIBRARY_PATH is configured correctly for CUDA if you are taking advantage of GPU acceleration, as handled inside `run.sh`).*
+*(Note: Ensure your `LD_LIBRARY_PATH` is configured correctly for CUDA if you are taking advantage of GPU acceleration. This is handled automatically inside `run.sh`)*
 
-1. **Upload Source:** Upload your target lecture video (mp4, mkv, mov).
+1. **Upload Source:** Upload your target media (mp4, mkv, mov, wav, mp3).
 2. **Configure Pipeline:** Select hardware acceleration, Whisper target precision, and the desired Voice Synthesis Strategy (Studio Voices or Voice Cloning).
 3. **Execute:** Click "Execute Restoration" to begin processing. You can stop the pipeline halfway gracefully using the visual Stop button.
-4. **Download:** Play the fully restored video directly in your browser, or download it.
+4. **Download:** Play the fully restored media directly in your browser or download it to your disk.
 
-## Architecture
+## 🏗️ Architecture
 
-- `streamlit_app.py` / `app.py`: The user interface and visual configurations. Built with Streamlit and Gradio (legacy).
-- `pipeline.py`: The core audio/video multiplexing logic. Orchestrates ffmpeg extractions, ASR, TTS inference alignment, and timeline matching.
+- `streamlit_app.py`: The user interface and visual configurations. Built with Streamlit, processing logic is scoped to temporary, collision-free directories.
+- `pipeline.py`: The core audio/video multiplexing logic. Orchestrates ffmpeg extractions, ASR, TTS inference alignment, and timeline matching natively using CPU limits dynamically.
 - `tts_manager.py`: Abstraction layer managing interactions with TTS inferencing engines (Kokoro and F5), including hardware dispatching and memory safe threading operations.
 - `run.sh`: Automated application launcher ensuring library bindings and prerequisite package resolutions.
+
+## ⚠️ Known Limitations
+- F5-TTS Voice Cloning is heavily experimental ("In-Dev") and requires isolated references.
+- `CUDA` Fallback to CPU is extremely stable but noticeably slower.

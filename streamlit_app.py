@@ -1,17 +1,18 @@
 import os
 import warnings
+import tempfile
+import traceback
+import streamlit as st
+from tts_manager import TTSManager
+from pipeline import AudioVideoPipeline
 
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 warnings.filterwarnings("ignore")
 
-import streamlit as st
-from tts_manager import TTSManager
-from pipeline import AudioVideoPipeline
-
 
 st.set_page_config(
-    page_title="Coherant | Dev Studio",
+    page_title="Coherent Speech Studio",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -35,8 +36,9 @@ def get_managers():
 
 tts_manager, pipeline = get_managers()
 
-st.title("🗣️ COHERANT-SPEECH")
-st.caption("`[ENGINE: KOKORO-82M] | [ASR: WHISPER] | [RUNTIME: NATIVE]`")
+st.title("🎙️ Coherent Speech")
+st.caption("`[ENGINE: KOKORO-82M] | [ASR: WHISPER] | [RESTORE DAMAGED SPEECH]`")
+st.markdown("**Enterprise-grade AI tool to automatically transcribe, clean, and restore damaged, garbled, or low-volume audio.**")
 st.divider()
 
 kokoro_voices = [
@@ -50,7 +52,7 @@ col1, col2 = st.columns(2, gap="large")
 with col1:
     with st.container(border=True):
         st.subheader("1. Source Input")
-        uploaded_video = st.file_uploader("Upload lecture video (mp4, mkv)", type=["mp4", "mkv", "mov"])
+        uploaded_video = st.file_uploader("Upload damaged audio/video (noisy, garbled, low volume)", type=["mp4", "mkv", "mov", "wav", "mp3"])
         
     with st.container(border=True):
         st.subheader("2. Generation Config")
@@ -74,7 +76,7 @@ with col1:
             selected_voice = st.selectbox("Select Voice Profile:", kokoro_voices)
             cloning_active = False
         else:
-            st.success("=> [HOOK ENGAGED]: Auto-Extraction Active. AI will isolate a 5-second slice from the uploaded video for voice map extraction.")
+            st.success("=> [HOOK ENGAGED]: Auto-Extraction Active. AI will isolate a reference voice sample from the file.")
             selected_voice = "Custom Clone"
             cloning_active = True
             
@@ -89,7 +91,11 @@ with col2:
         st.subheader("3. Execution Terminal")
         
         if uploaded_video:
-            st.video(uploaded_video)
+            # We can only show video if it's a video file, otherwise audio
+            if uploaded_video.name.endswith(("mp4", "mov", "mkv")):
+                st.video(uploaded_video)
+            else:
+                st.audio(uploaded_video)
             
         if 'cancel_pipeline' not in st.session_state:
             st.session_state.cancel_pipeline = False
@@ -117,59 +123,90 @@ with col2:
                     return st.session_state.cancel_pipeline
 
                 try:
-                    update_prog(5, "Extracting Audio from Video...")
+                    if uploaded_video.size > 500 * 1024 * 1024:
+                        raise ValueError("File exceeds maximum limit of 500MB. Please use a smaller file or chunk the audio.")
+                    update_prog(5, "Extracting Audio/Preparing File...")
                     
-                    temp_vid_path = "temp_source.mp4"
-                    with open(temp_vid_path, "wb") as f:
-                        f.write(uploaded_video.getbuffer())
+                    with tempfile.TemporaryDirectory() as base_temp:
+                
+                        temp_vid_path = os.path.join(base_temp, uploaded_video.name)
+                        temp_audio_path = os.path.join(base_temp, "extracted_audio.wav")
+                        final_out_path = os.path.join(base_temp, "restored_media.mp4")
                         
-                    pipeline.extract_audio(temp_vid_path, "temp_audio.wav")
-                    
-                    if not st.session_state.cancel_pipeline:
-                        update_prog(10, "Starting Whisper ASR Engine...")
-                        segments = pipeline.run_asr(
-                            "temp_audio.wav", 
-                            model_size=whisper_size,
-                            progress_callback=update_prog,
-                            check_cancel=check_prog,
-                            device_override=selected_hw
-                        )
-                    
-                    if not st.session_state.cancel_pipeline:
-                        video_dur = pipeline.get_video_duration(temp_vid_path)
+                        with open(temp_vid_path, "wb") as f:
+                            f.write(uploaded_video.getbuffer())
+                            
+                        pipeline.extract_audio(temp_vid_path, temp_audio_path)
                         
-                        if cloning_active:
-                            composed_path = pipeline.synthesize_and_align_cloning(
-                                segments, video_dur, progress_callback=update_prog, check_cancel=check_prog
+                        if not st.session_state.cancel_pipeline:
+                            update_prog(10, "Starting Whisper ASR Engine...")
+                            segments = pipeline.run_asr(
+                                temp_audio_path, 
+                                model_size=whisper_size,
+                                progress_callback=update_prog,
+                                check_cancel=check_prog,
+                                device_override=selected_hw
                             )
+                            
+                        if not segments and not st.session_state.cancel_pipeline:
+                            raise ValueError("No speech detected in the uploaded file.")
+                        
+                        if not st.session_state.cancel_pipeline:
+                            video_dur = pipeline.get_video_duration(temp_vid_path)
+                            
+                            if cloning_active:
+                                composed_path = pipeline.synthesize_and_align_cloning(
+                                    segments, video_dur, progress_callback=update_prog, check_cancel=check_prog
+                                )
+                            else:
+                                composed_path = pipeline.synthesize_and_align(
+                                    segments, video_dur, "Kokoro Modern", kokoro_voice=selected_voice,
+                                    progress_callback=update_prog, check_cancel=check_prog
+                                )
+                        
+                        if not st.session_state.cancel_pipeline:
+                            update_prog(90, "Multiplexing Final Matrix...")
+                            # If they uploaded audio, just give them the composed clean audio back
+                            if uploaded_video.name.endswith(("wav", "mp3", "m4a")):
+                                final_path = composed_path
+                                mime_type = "audio/wav"
+                                dl_name = "Restored_Audio.wav"
+                            else:
+                                final_path = pipeline.assemble_final_video(
+                                    temp_vid_path, composed_path, final_out_path
+                                )
+                                mime_type = "video/mp4"
+                                dl_name = "Restored_Media.mp4"
+                            
+                            update_prog(100, "RESTORATION COMPLETE ✓")
+                            status_console.code("$> pipeline_complete 100%\n[OK]")
+                            
+                            if mime_type.startswith("video"):
+                                st.video(final_path)
+                            else:
+                                st.audio(final_path)
+                            
+                            with open(final_path, "rb") as file:
+                                st.download_button(
+                                    label="DOWNLOAD RESTORED MEDIA",
+                                    data=file,
+                                    file_name=dl_name,
+                                    mime=mime_type,
+                                    use_container_width=True
+                                )
                         else:
-                            composed_path = pipeline.synthesize_and_align(
-                                segments, video_dur, "Kokoro Modern", kokoro_voice=selected_voice,
-                                progress_callback=update_prog, check_cancel=check_prog
-                            )
-                    
-                    if not st.session_state.cancel_pipeline:
-                        update_prog(90, "Multiplexing Final Matrix...")
-                        final_path = pipeline.assemble_final_video(
-                            temp_vid_path, composed_path, "output_restored_video.mp4"
-                        )
-                        
-                        update_prog(100, "RESTORATION COMPLETE ✓")
-                        status_console.code("$> pipeline_complete 100%\n[OK]")
-                        st.video(final_path)
-                        
-                        dl_name = "Cloned_Lecture.mp4" if cloning_active else "Studio_Lecture.mp4"
-                        with open(final_path, "rb") as file:
-                            st.download_button(
-                                label="DOWNLOAD MEDIA",
-                                data=file,
-                                file_name=dl_name,
-                                mime="video/mp4",
-                                use_container_width=True
-                            )
+                            st.warning("PIPELINE HALTED BY USER")
+                            update_prog(0, "Halted.")
+                            status_console.code("$> SIGINT Received. Terminated.\n[WARN]")
+                
+                except ValueError as ve:
+                    st.error(f"Validation Error: {str(ve)}")
+                except RuntimeError as re:
+                    error_msg = str(re).lower()
+                    if "out of memory" in error_msg or "cuda out of memory" in error_msg:
+                        st.error("Hardware Error: GPU Out of Memory. Please try checking the 'CPU' fallback option or a smaller ASR model.")
                     else:
-                        st.warning("PIPELINE HALTED BY USER")
-                        update_prog(0, "Halted.")
-                        status_console.code("$> SIGINT Received. Terminated.\n[WARN]")
+                        st.error(f"Runtime Fault: {str(re)}")
                 except Exception as e:
-                    st.error(f"EXCEPTION FAULT: {str(e)}")
+                    st.error(f"PIPELINE PAULT: Failed to process file. \n\n{str(e)}")
+                    print(traceback.format_exc())

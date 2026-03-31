@@ -23,7 +23,7 @@ class AudioVideoPipeline:
             (
                 ffmpeg
                 .input(video_path)
-                .output(output_audio_path, ac=1, ar="16000", threads=16) # use all 16 threads of 5900HS
+                .output(output_audio_path, ac=1, ar="16000", threads=os.cpu_count() or 4)
                 .overwrite_output()
                 .run(capture_stdout=True, capture_stderr=True)
             )
@@ -33,7 +33,7 @@ class AudioVideoPipeline:
 
     def run_asr(self, audio_path, model_size="small", progress_callback=None, check_cancel=None, device_override=None):
         # 0. Check Cache
-        cache_dir = Path(".cache/asr")
+        cache_dir = Path.home() / ".cache" / "coherent-speech" / "asr"
         cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Calculate file hash
@@ -42,7 +42,8 @@ class AudioVideoPipeline:
         
         if cache_file.exists():
             print(f"CACHE HIT: Loading segments from {cache_file}")
-            if progress_callback: progress_callback(25, "Loading Cached Transcription...")
+            if progress_callback:
+                progress_callback(25, "Loading Cached Transcription...")
             with open(cache_file, 'r') as f:
                 return json.load(f)
 
@@ -66,7 +67,7 @@ class AudioVideoPipeline:
                 device=device, 
                 compute_type=compute_type,
                 download_root="models/whisper",
-                cpu_threads=16,
+                cpu_threads=os.cpu_count() or 4,
                 num_workers=4
             )
             # Trigger library check early
@@ -84,7 +85,7 @@ class AudioVideoPipeline:
                     device="cpu", 
                     compute_type="int8",
                     download_root="models/whisper",
-                    cpu_threads=16,
+                    cpu_threads=os.cpu_count() or 4,
                     num_workers=4
                 )
                 segments, info = model.transcribe(
@@ -144,12 +145,11 @@ class AudioVideoPipeline:
                 position_ms = int(seg["start"] * 1000)
                 output_audio = output_audio.overlay(tts_clip, position=position_ms)
         
-        composed_path = "composed_clean_audio.wav"
+        composed_path = os.path.join(temp_dir, "composed_clean_audio.wav")
         output_audio.export(composed_path, format="wav")
         return composed_path
 
     def extract_reference(self, segments, audio_path):
-        from pydub import AudioSegment
         audio = AudioSegment.from_wav(audio_path)
         
         best_seg = None
@@ -169,7 +169,8 @@ class AudioVideoPipeline:
         end_ms = int(best_seg["end"] * 1000)
         
         ref_clip = audio[start_ms:end_ms]
-        ref_path = "f5_reference.wav"
+        import tempfile
+        ref_path = os.path.join(tempfile.gettempdir(), f"f5_reference_{hash(audio_path)}.wav")
         ref_clip.export(ref_path, format="wav")
         return ref_path, best_seg["text"].strip()
 
@@ -177,7 +178,6 @@ class AudioVideoPipeline:
         print("Synthesizing cloned speech and aligning...")
         if progress_callback:
             progress_callback(30, "Extracting Cloned Voice DNA...")
-        from pydub import AudioSegment
         import concurrent.futures
         import threading
         try:
@@ -233,7 +233,7 @@ class AudioVideoPipeline:
                     pct = 35 + int(55 * (completed / max(1, total)))
                     progress_callback(pct, f"Synthesizing F5 Clone Audio ({completed}/{total})...")
         
-        composed_path = "composed_clean_audio.wav"
+        composed_path = os.path.join(temp_dir, "composed_clean_audio.wav")
         output_audio.export(composed_path, format="wav")
         return composed_path
 
