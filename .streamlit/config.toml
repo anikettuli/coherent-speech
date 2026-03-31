@@ -1,0 +1,15 @@
+[theme]
+# Primary accent color (Slider, Checkbox, etc.)
+primaryColor = "#00e676"
+# Background colors for the app
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#1a1c24"
+# Text and font styling
+textColor = "#fafafa"
+font = "monospace"
+base = "dark"
+
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false

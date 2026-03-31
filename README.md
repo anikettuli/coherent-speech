@@ -2,6 +2,8 @@
 
 # 🎙️ Coherent Speech Studio
 
+**[🚀 Try the Live App!](https://coherent-speech.streamlit.app/)**
+
 [![Python 3.13](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![UI: Streamlit](https://img.shields.io/badge/UI-Streamlit-red.svg)](https://streamlit.io/)
